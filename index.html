@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>New Chat Widget Test</title>
+    <style>
+        body { font-family: sans-serif; margin: 20px; }
+        .button {
+            display: inline-block;
+            background-color: #2563eb;
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 0.25rem;
+            text-decoration: none;
+            margin-top: 1rem;
+            cursor: pointer;
+        }
+        .button:hover { background-color: #1d4ed8; }
+    </style>
+    <!-- Required Dependencies -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
+</head>
+<body>
+    <h1>New Chat Widget Test</h1>
+    <p>This page is for testing the WebSocket Chat Widget with a direct WebSocket connection.</p>
+    
+    <button onclick="toggleChatWidget()" class="button">Toggle Chat</button>
+
+    <!-- Load the chat widget from the local dist directory -->
+    <script src="../dist/streaming-chat-widget.js"></script>
+    
+    <script>
+        // Initialize the chat widget
+        const chatWidget = new StreamingChatWidget({
+            chatId: '285ddd5c-a0e4-4435-b5e7-498e1df221a4', // Used by sessionEndpointUrl
+            sessionEndpointUrl: 'https://chat-backend-dot-noderedapp-412619.ey.r.appspot.com/api/chat/session',
+            backendStreamUrl: 'https://chat-backend-dot-noderedapp-412619.ey.r.appspot.com/api/chat/stream_message',
+            theme: {
+                primaryColor: '#3B82F6', // Example: Blue
+                secondaryColor: '#1E40AF', // Example: Dark Blue
+                userMessageBg: '#EFF6FF',
+                userMessageText: '#1E40AF',
+                botMessageBg: '#F9FAFB',
+                botMessageText: '#111827',
+                systemMessageBg: '#F3F4F6',
+                systemMessageText: '#4B5563'
+            },
+            text: {
+                headerTitle: 'Test Chat (Session)',
+                welcomeMessage: 'Welcome! Click Toggle Chat to start.',
+                inputPlaceholder: 'Type your message...'
+            }
+        });
+
+        // Session details (chatId is now in the config above)
+        // const CHAT_ID = '7a3e4d26-bc41-4ee4-9b27-ba0299d5833f'; // No longer needed here
+        // const SESSION_ENDPOINT = 'https://chat-backend-dot-noderedapp-412619.ey.r.appspot.com/api/chat/session'; // In config
+        // const BACKEND_STREAM_URL = 'https://chat-backend-dot-noderedapp-412619.ey.r.appspot.com/api/chat/stream_message'; // In config
+        // let sessionInitialized = false; // Widget now manages its own session state (isSessionInitialized)
+
+        async function toggleChatWidget() {
+            // Initialize session on first toggle if not already done by the widget or another call
+            if (chatWidget && !chatWidget.isSessionInitialized && typeof chatWidget.initSession === 'function') {
+                console.log('Initiating chat session...');
+                await chatWidget.initSession(); 
+                // No need to set sessionInitialized here, widget handles it.
+            }
+            
+            // Toggle chat visibility
+            if (chatWidget && typeof chatWidget.toggleChat === 'function') {
+                chatWidget.toggleChat();
+            }
+        }
+        // It's also possible to call chatWidget.initSession() on page load if desired,
+        // rather than waiting for the first toggle.
+        // Example:
+        // if (chatWidget && typeof chatWidget.initSession === 'function') {
+        //     chatWidget.initSession(); 
+        // }
+    </script>
+</body>
+</html>
