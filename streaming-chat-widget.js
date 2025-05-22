@@ -212,91 +212,94 @@
                     this.streamState.currentBotMessage = lastBotMessageContainer.querySelector(`.${this.namespace}-bot-message`);
                 }
             }
-            // Accumulate content but don't render intermediate states
-            if (this.streamState.currentBotMessage) {
+            // Render incrementally
+            if (this.streamState.currentBotMessage && data.content) { // Check if data.content exists
                  this.streamState.activeMessageContent += data.content;
-                 // We will render the full content upon completion
+                
+                 let htmlContent = marked.parse(this.streamState.activeMessageContent);
+                 // console.log("Raw HTML from marked (incremental):", htmlContent);
+
+                 // Post-process HTML for image styles
+                 const tempDiv = document.createElement('div');
+                 tempDiv.innerHTML = htmlContent;
+                 const images = tempDiv.querySelectorAll('img');
+                 images.forEach(img => {
+                     const title = img.getAttribute('title');
+                     if (title) {
+                         const styleRegex = /style="([^"]*)"/;
+                         const match = title.match(styleRegex);
+                         if (match && match[1]) {
+                             const styleValue = match[1];
+                             img.style.cssText = img.style.cssText ? img.style.cssText.replace(/;$/, '') + ';' + styleValue : styleValue;
+                             let newTitle = title.replace(styleRegex, '').replace(/\s*\/[\s)]*$/, '').trim();
+                             if (newTitle) {
+                                 img.setAttribute('title', newTitle);
+                             } else {
+                                 img.removeAttribute('title');
+                             }
+                         }
+                     }
+                 });
+                 htmlContent = tempDiv.innerHTML;
+
+                 // Sanitize and set the HTML
+                 this.streamState.currentBotMessage.innerHTML = DOMPurify.sanitize(htmlContent, {
+                     ADD_TAGS: ['iframe', 'video', 'source'],
+                     ALLOW_TAGS: ['b', 'i', 'em', 'strong', 'a', 'p', 'ul', 'ol', 'li', 'br', 'img', 'pre', 'code', 'blockquote', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'hr', 'span'],
+                     ALLOW_ATTR: ['href', 'src', 'alt', 'title', 'target', 'rel', 'class', 'style', 'controls', 'autoplay', 'loop', 'muted', 'poster', 'preload', 'width', 'height', 'type', 'frameborder', 'allowfullscreen', 'allow'],
+                     ADD_ATTR: ['target', 'rel']
+                 });
+
+                 // --- BEGIN YouTube Embed Logic (Applied incrementally) ---
+                 const youtubeEmbedDiv = document.createElement('div');
+                 youtubeEmbedDiv.innerHTML = this.streamState.currentBotMessage.innerHTML; // Work with the current sanitized HTML
+
+                 youtubeEmbedDiv.querySelectorAll('a').forEach(link => {
+                     try {
+                         const url = new URL(link.href);
+                         let videoId = null;
+
+                         if (url.hostname === 'www.youtube.com' || url.hostname === 'youtube.com') {
+                             if (url.pathname === '/watch') {
+                                 videoId = url.searchParams.get('v');
+                             } else if (url.pathname.startsWith('/embed/')) {
+                                 videoId = url.pathname.substring('/embed/'.length);
+                             }
+                         } else if (url.hostname === 'youtu.be') {
+                             videoId = url.pathname.substring(1); // Remove leading '/'
+                         }
+
+                         if (videoId) {
+                             const iframe = document.createElement('iframe');
+                             iframe.setAttribute('src', `https://www.youtube.com/embed/${videoId}`);
+                             iframe.setAttribute('width', '100%'); 
+                             const parentWidth = this.streamState.currentBotMessage.offsetWidth || 300; 
+                             iframe.setAttribute('height', `${Math.round(parentWidth * 9 / 16)}`); 
+                             iframe.setAttribute('frameborder', '0');
+                             iframe.setAttribute('allow', 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture');
+                             iframe.setAttribute('allowfullscreen', '');
+                            
+                             // Check if the link is already replaced to avoid nested iframes or errors
+                             if (link.parentNode && link.parentNode !== youtubeEmbedDiv) { 
+                                link.parentNode.replaceChild(iframe, link);
+                             } else if (link.parentNode === youtubeEmbedDiv) { 
+                                youtubeEmbedDiv.replaceChild(iframe, link);
+                             }
+                         }
+                     } catch (e) {
+                         console.warn("Could not process link for YouTube embed (incremental):", link.href, e);
+                     }
+                 });
+                
+                 this.streamState.currentBotMessage.innerHTML = youtubeEmbedDiv.innerHTML;
+                 // --- END YouTube Embed Logic ---
+                
+                 this._scrollToBottom();
             }
         } else if (eventName === 'thread.run.completed') {
-             if (this.streamState.currentBotMessage && this.streamState.activeMessageContent) {
-                // Now parse and render the complete message
-                let htmlContent = marked.parse(this.streamState.activeMessageContent);
-                // console.log("Raw HTML from marked (final):", htmlContent); // Log final HTML
-
-                // Post-process HTML for image styles (if needed, though iframe is main goal now)
-                const tempDiv = document.createElement('div');
-                tempDiv.innerHTML = htmlContent;
-                const images = tempDiv.querySelectorAll('img');
-                images.forEach(img => {
-                    const title = img.getAttribute('title');
-                    if (title) {
-                        const styleRegex = /style="([^"]*)"/;
-                        const match = title.match(styleRegex);
-                        if (match && match[1]) {
-                            const styleValue = match[1];
-                            // Append to existing styles, ensuring a semicolon separator if needed
-                            img.style.cssText = img.style.cssText ? img.style.cssText.replace(/;$/, '') + ';' + styleValue : styleValue;
-                            // Clean up the title attribute: remove the style part and any trailing " /)" or similar
-                            let newTitle = title.replace(styleRegex, '').replace(/\s*\/[\s)]*$/, '').trim();
-                            if (newTitle) {
-                                img.setAttribute('title', newTitle);
-                            } else {
-                                img.removeAttribute('title');
-                            }
-                        }
-                    }
-                });
-                htmlContent = tempDiv.innerHTML; // Get the modified HTML with potential style fixes
-
-                // Sanitize and set the final HTML
-                this.streamState.currentBotMessage.innerHTML = DOMPurify.sanitize(htmlContent, {
-                    ADD_TAGS: ['iframe', 'video', 'source'], // Explicitly add potentially unsafe tags
-                    ALLOW_TAGS: ['b', 'i', 'em', 'strong', 'a', 'p', 'ul', 'ol', 'li', 'br', 'img', 'pre', 'code', 'blockquote', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'hr', 'span'], // Keep standard safe tags here
-                    ALLOW_ATTR: ['href', 'src', 'alt', 'title', 'target', 'rel', 'class', 'style', 'controls', 'autoplay', 'loop', 'muted', 'poster', 'preload', 'width', 'height', 'type', 'frameborder', 'allowfullscreen', 'allow'],
-                    ADD_ATTR: ['target', 'rel'] // Add target="_blank" etc. to links
-                });
-
-                // --- BEGIN YouTube Embed Logic (Re-added) ---
-                const youtubeEmbedDiv = document.createElement('div');
-                youtubeEmbedDiv.innerHTML = this.streamState.currentBotMessage.innerHTML; // Work with the sanitized HTML
-
-                youtubeEmbedDiv.querySelectorAll('a').forEach(link => {
-                    try {
-                        const url = new URL(link.href);
-                        let videoId = null;
-
-                        if (url.hostname === 'www.youtube.com' || url.hostname === 'youtube.com') {
-                            if (url.pathname === '/watch') {
-                                videoId = url.searchParams.get('v');
-                            } else if (url.pathname.startsWith('/embed/')) {
-                                videoId = url.pathname.substring('/embed/'.length);
-                            }
-                        } else if (url.hostname === 'youtu.be') {
-                            videoId = url.pathname.substring(1); // Remove leading '/'
-                        }
-
-                        if (videoId) {
-                            const iframe = document.createElement('iframe');
-                            iframe.setAttribute('src', `https://www.youtube.com/embed/${videoId}`);
-                            iframe.setAttribute('width', '100%'); 
-                            const parentWidth = this.streamState.currentBotMessage.offsetWidth || 300; 
-                            iframe.setAttribute('height', `${Math.round(parentWidth * 9 / 16)}`); 
-                            iframe.setAttribute('frameborder', '0');
-                            iframe.setAttribute('allow', 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture');
-                            iframe.setAttribute('allowfullscreen', '');
-                            
-                            link.parentNode.replaceChild(iframe, link);
-                        }
-                    } catch (e) {
-                        console.warn("Could not process link for YouTube embed:", link.href, e);
-                    }
-                });
-                
-                this.streamState.currentBotMessage.innerHTML = youtubeEmbedDiv.innerHTML;
-                // --- END YouTube Embed Logic ---
-                
-                this._scrollToBottom();
-             }
+            // Content is now rendered incrementally in thread.message.delta.
+            // This block is now just for cleanup.
+            // console.log('Thread run completed. Finalizing stream state.');
             this.streamState.isStreaming = false;
             this._removeTypingIndicator();
             this.streamState.currentBotMessage = null; 
@@ -1097,7 +1100,7 @@
           cursor: pointer;
           transition: background-color 0.2s;
           ${this.config.predefinedQuestions.allowTextWrapping ? 
-            'white-space: normal; ' : 
+            'white-space: nowrap; ' :  // Changed from normal to nowrap
             'white-space: nowrap; text-overflow: ellipsis; overflow: hidden; max-width: 200px;'}
           background-color: ${this.config.predefinedQuestions.buttonColor};
           color: ${this.config.predefinedQuestions.textColor};
