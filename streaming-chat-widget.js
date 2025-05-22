@@ -1473,22 +1473,84 @@
         message.className = `${this.namespace}-message ${this.namespace}-bot-message`;
         
         // If content is markdown, process it
+        let htmlContent = marked.parse(content);
+
+        // Post-process HTML for image styles (similar to _handleStreamEvent)
+        const tempDivImg = document.createElement('div');
+        tempDivImg.innerHTML = htmlContent;
+        const images = tempDivImg.querySelectorAll('img');
+        images.forEach(img => {
+            const title = img.getAttribute('title');
+            if (title) {
+                const styleRegex = /style="([^"]*)"/;
+                const match = title.match(styleRegex);
+                if (match && match[1]) {
+                    const styleValue = match[1];
+                    img.style.cssText = img.style.cssText ? img.style.cssText.replace(/;$/, '') + ';' + styleValue : styleValue;
+                    let newTitle = title.replace(styleRegex, '').replace(/\s*\/[\s)]*$/, '').trim();
+                    if (newTitle) {
+                        img.setAttribute('title', newTitle);
+                    } else {
+                        img.removeAttribute('title');
+                    }
+                }
+            }
+        });
+        htmlContent = tempDivImg.innerHTML;
+
         if (this.config.sanitization.output) {
-          // Convert markdown to HTML and sanitize
-          const rawHtml = marked.parse(content);
-          // Configure DOMPurify to keep more elements and attributes
-          const sanitizedHtml = DOMPurify.sanitize(rawHtml, {
-            ADD_TAGS: ['iframe', 'video', 'source'], // Explicitly add potentially unsafe tags
-            ALLOW_TAGS: ['b', 'i', 'em', 'strong', 'a', 'p', 'ul', 'ol', 'li', 'br', 'img', 'pre', 'code', 'blockquote', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'hr', 'span'], // Keep standard safe tags here
+          // Sanitize the processed HTML
+          message.innerHTML = DOMPurify.sanitize(htmlContent, {
+            ADD_TAGS: ['iframe', 'video', 'source'], 
+            ALLOW_TAGS: ['b', 'i', 'em', 'strong', 'a', 'p', 'ul', 'ol', 'li', 'br', 'img', 'pre', 'code', 'blockquote', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'hr', 'span'], 
             ALLOW_ATTR: ['href', 'src', 'alt', 'title', 'target', 'rel', 'class', 'style', 'controls', 'autoplay', 'loop', 'muted', 'poster', 'preload', 'width', 'height', 'type', 'frameborder', 'allowfullscreen', 'allow'],
-            ADD_ATTR: ['target', 'rel'] // Add target="_blank" etc. to links
+            ADD_ATTR: ['target', 'rel'] 
           });
-          message.innerHTML = sanitizedHtml;
         } else {
-          // Just convert markdown to HTML without sanitization
-          message.innerHTML = marked.parse(content);
+          message.innerHTML = htmlContent; // Use the image-processed HTML
         }
-        
+
+        // Apply YouTube Embed Logic (similar to _handleStreamEvent, applied to the 'message' element's innerHTML)
+        const youtubeEmbedDiv = document.createElement('div');
+        youtubeEmbedDiv.innerHTML = message.innerHTML; // Work with the current (potentially sanitized) HTML
+
+        youtubeEmbedDiv.querySelectorAll('a').forEach(link => {
+            try {
+                const url = new URL(link.href);
+                let videoId = null;
+
+                if (url.hostname === 'www.youtube.com' || url.hostname === 'youtube.com') {
+                    if (url.pathname === '/watch') {
+                        videoId = url.searchParams.get('v');
+                    } else if (url.pathname.startsWith('/embed/')) {
+                        videoId = url.pathname.substring('/embed/'.length);
+                    }
+                } else if (url.hostname === 'youtu.be') {
+                    videoId = url.pathname.substring(1);
+                }
+
+                if (videoId) {
+                    const iframe = document.createElement('iframe');
+                    iframe.setAttribute('src', `https://www.youtube.com/embed/${videoId}`);
+                    iframe.setAttribute('width', '100%');
+                    const parentWidth = message.offsetWidth || 300; 
+                    iframe.setAttribute('height', `${Math.round(parentWidth * 9 / 16)}`);
+                    iframe.setAttribute('frameborder', '0');
+                    iframe.setAttribute('allow', 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture');
+                    iframe.setAttribute('allowfullscreen', '');
+                   
+                    if (link.parentNode && link.parentNode !== youtubeEmbedDiv) { 
+                       link.parentNode.replaceChild(iframe, link);
+                    } else if (link.parentNode === youtubeEmbedDiv) { 
+                       youtubeEmbedDiv.replaceChild(iframe, link);
+                    }
+                }
+            } catch (e) {
+                console.warn("Could not process link for YouTube embed in _addMessage:", link.href, e);
+            }
+        });
+        message.innerHTML = youtubeEmbedDiv.innerHTML; // Set final HTML with embeds
+
         wrapper.appendChild(avatar);
         wrapper.appendChild(message);
         this.elements.chatMessages.appendChild(wrapper);
