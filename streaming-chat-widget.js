@@ -412,9 +412,18 @@
                         try {
                             const parsedData = JSON.parse(eventData);
                             if (eventName === 'cached_message') { // Handle new event type
-                                // console.log('Handling cached_message:', parsedData);
+                                console.log('[DEBUG cached_message_handler] Received event. Parsed data:', parsedData);
                                 if (parsedData.role && parsedData.content) {
-                                    this._addMessage(parsedData.role, parsedData.content);
+                                    const messageType = parsedData.role === 'assistant' ? 'bot' : parsedData.role;
+                                    console.log(`[DEBUG cached_message_handler] Attempting to call _addMessage with type: "${messageType}" (original role: "${parsedData.role}"), content snippet: "${parsedData.content ? parsedData.content.substring(0, 30) + '...' : 'EMPTY'}"`);
+                                    try {
+                                        this._addMessage(messageType, parsedData.content);
+                                        console.log(`[DEBUG cached_message_handler] Completed call to _addMessage for type: "${messageType}" (original role: "${parsedData.role}")`);
+                                    } catch (e_addMessage) {
+                                        console.error(`[DEBUG cached_message_handler] Error during _addMessage call for type "${messageType}" (original role "${parsedData.role}"):`, e_addMessage);
+                                    }
+                                } else {
+                                    console.warn('[DEBUG cached_message_handler] Parsed data missing role or content:', parsedData);
                                 }
                             } else { // Existing event handling
                                 this._handleStreamEvent(eventName, parsedData);
@@ -1465,95 +1474,52 @@
         const wrapper = document.createElement('div');
         wrapper.className = `${this.namespace}-message-with-avatar ${this.namespace}-bot-message-container`;
         
+        console.log(`[DEBUG _addMessage type='bot'] Entered. Content: "${content ? content.substring(0, 50) + '...' : 'EMPTY'}"`);
+
         const avatar = document.createElement('div');
         avatar.className = `${this.namespace}-avatar ${this.namespace}-bot-avatar`;
         avatar.innerHTML = this._createIconElement(this.config.icons.botAvatar);
+        console.log('[DEBUG _addMessage type=\'bot\'] Created avatar element:', avatar);
         
         const message = document.createElement('div');
         message.className = `${this.namespace}-message ${this.namespace}-bot-message`;
+        console.log('[DEBUG _addMessage type=\'bot\'] Created message element:', message);
         
-        // If content is markdown, process it
-        let htmlContent = marked.parse(content);
-
-        // Post-process HTML for image styles (similar to _handleStreamEvent)
-        const tempDivImg = document.createElement('div');
-        tempDivImg.innerHTML = htmlContent;
-        const images = tempDivImg.querySelectorAll('img');
-        images.forEach(img => {
-            const title = img.getAttribute('title');
-            if (title) {
-                const styleRegex = /style="([^"]*)"/;
-                const match = title.match(styleRegex);
-                if (match && match[1]) {
-                    const styleValue = match[1];
-                    img.style.cssText = img.style.cssText ? img.style.cssText.replace(/;$/, '') + ';' + styleValue : styleValue;
-                    let newTitle = title.replace(styleRegex, '').replace(/\s*\/[\s)]*$/, '').trim();
-                    if (newTitle) {
-                        img.setAttribute('title', newTitle);
-                    } else {
-                        img.removeAttribute('title');
-                    }
-                }
-            }
-        });
-        htmlContent = tempDivImg.innerHTML;
+        // If content is markdown, process it (Simplified for debugging)
+        const rawHtml = marked.parse(content || ''); // Ensure content is not null/undefined for marked
+        console.log('[DEBUG _addMessage type=\'bot\'] Raw HTML from marked.parse:', rawHtml ? rawHtml.substring(0, 100) + '...' : 'EMPTY');
 
         if (this.config.sanitization.output) {
-          // Sanitize the processed HTML
-          message.innerHTML = DOMPurify.sanitize(htmlContent, {
+          // Basic sanitization
+          message.innerHTML = DOMPurify.sanitize(rawHtml, {
             ADD_TAGS: ['iframe', 'video', 'source'], 
             ALLOW_TAGS: ['b', 'i', 'em', 'strong', 'a', 'p', 'ul', 'ol', 'li', 'br', 'img', 'pre', 'code', 'blockquote', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'hr', 'span'], 
             ALLOW_ATTR: ['href', 'src', 'alt', 'title', 'target', 'rel', 'class', 'style', 'controls', 'autoplay', 'loop', 'muted', 'poster', 'preload', 'width', 'height', 'type', 'frameborder', 'allowfullscreen', 'allow'],
             ADD_ATTR: ['target', 'rel'] 
           });
+          console.log('[DEBUG _addMessage type=\'bot\'] Sanitized HTML:', message.innerHTML ? message.innerHTML.substring(0, 100) + '...' : 'EMPTY');
         } else {
-          message.innerHTML = htmlContent; // Use the image-processed HTML
+          message.innerHTML = rawHtml;
+          console.log('[DEBUG _addMessage type=\'bot\'] HTML (no sanitization):', message.innerHTML ? message.innerHTML.substring(0, 100) + '...' : 'EMPTY');
         }
-
-        // Apply YouTube Embed Logic (similar to _handleStreamEvent, applied to the 'message' element's innerHTML)
-        const youtubeEmbedDiv = document.createElement('div');
-        youtubeEmbedDiv.innerHTML = message.innerHTML; // Work with the current (potentially sanitized) HTML
-
-        youtubeEmbedDiv.querySelectorAll('a').forEach(link => {
-            try {
-                const url = new URL(link.href);
-                let videoId = null;
-
-                if (url.hostname === 'www.youtube.com' || url.hostname === 'youtube.com') {
-                    if (url.pathname === '/watch') {
-                        videoId = url.searchParams.get('v');
-                    } else if (url.pathname.startsWith('/embed/')) {
-                        videoId = url.pathname.substring('/embed/'.length);
-                    }
-                } else if (url.hostname === 'youtu.be') {
-                    videoId = url.pathname.substring(1);
-                }
-
-                if (videoId) {
-                    const iframe = document.createElement('iframe');
-                    iframe.setAttribute('src', `https://www.youtube.com/embed/${videoId}`);
-                    iframe.setAttribute('width', '100%');
-                    const parentWidth = message.offsetWidth || 300; 
-                    iframe.setAttribute('height', `${Math.round(parentWidth * 9 / 16)}`);
-                    iframe.setAttribute('frameborder', '0');
-                    iframe.setAttribute('allow', 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture');
-                    iframe.setAttribute('allowfullscreen', '');
-                   
-                    if (link.parentNode && link.parentNode !== youtubeEmbedDiv) { 
-                       link.parentNode.replaceChild(iframe, link);
-                    } else if (link.parentNode === youtubeEmbedDiv) { 
-                       youtubeEmbedDiv.replaceChild(iframe, link);
-                    }
-                }
-            } catch (e) {
-                console.warn("Could not process link for YouTube embed in _addMessage:", link.href, e);
-            }
-        });
-        message.innerHTML = youtubeEmbedDiv.innerHTML; // Set final HTML with embeds
+        // Temporarily removed advanced image styling and YouTube embed logic for this block for debugging.
 
         wrapper.appendChild(avatar);
         wrapper.appendChild(message);
-        this.elements.chatMessages.appendChild(wrapper);
+        console.log('[DEBUG _addMessage type=\'bot\'] Created wrapper. Wrapper outerHTML:', wrapper.outerHTML ? wrapper.outerHTML.substring(0, 200) + '...' : 'EMPTY');
+
+        if (this.elements.chatMessages) {
+            console.log('[DEBUG _addMessage type=\'bot\'] this.elements.chatMessages exists. Current innerHTML (first 200 chars):', this.elements.chatMessages.innerHTML ? this.elements.chatMessages.innerHTML.substring(0,200) + '...' : 'EMPTY');
+            console.log('[DEBUG _addMessage type=\'bot\'] Attempting to append wrapper to chatMessages. Wrapper valid:', wrapper instanceof Node);
+            try {
+                this.elements.chatMessages.appendChild(wrapper);
+                console.log('[DEBUG _addMessage type=\'bot\'] Successfully appended wrapper to chatMessages. chatMessages new innerHTML (first 200 chars):', this.elements.chatMessages.innerHTML ? this.elements.chatMessages.innerHTML.substring(0,200) + '...' : 'EMPTY');
+            } catch (e_appendChild) {
+                console.error('[DEBUG _addMessage type=\'bot\'] ERROR during appendChild:', e_appendChild);
+            }
+        } else {
+            console.error('[DEBUG _addMessage type=\'bot\'] ERROR: this.elements.chatMessages is null or undefined! Cannot append message.');
+        }
       }
       
       // Scroll to bottom
