@@ -411,7 +411,14 @@
                     if (eventData) {
                         try {
                             const parsedData = JSON.parse(eventData);
-                            this._handleStreamEvent(eventName, parsedData);
+                            if (eventName === 'cached_message') { // Handle new event type
+                                // console.log('Handling cached_message:', parsedData);
+                                if (parsedData.role && parsedData.content) {
+                                    this._addMessage(parsedData.role, parsedData.content);
+                                }
+                            } else { // Existing event handling
+                                this._handleStreamEvent(eventName, parsedData);
+                            }
                         } catch (e) {
                             console.error('Error parsing SSE data:', eventData, e);
                             // Potentially add a system message about malformed data
