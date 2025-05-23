@@ -1128,6 +1128,13 @@ class StreamingChatWidget {
     this.elements = {};
     this.namespace = "sse-chat-" + Math.random().toString(36).substr(2, 9);
     this.addMessage = this._addMessage.bind(this);
+    this._updateStreamedMessage = this._updateStreamedMessage.bind(this);
+    this._showTypingIndicator = this._showTypingIndicator.bind(this);
+    this._removeTypingIndicator = this._removeTypingIndicator.bind(this);
+    this._showSendingSpinner = this._showSendingSpinner.bind(this);
+    this._removeSendingSpinner = this._removeSendingSpinner.bind(this);
+    this._scrollToBottom = this._scrollToBottom.bind(this);
+    this._handlePredefinedQuestion = this._handlePredefinedQuestion.bind(this);
     this._setupDependencies();
     this._initUI();
   }
