@@ -1150,7 +1150,7 @@ class StreamingChatWidget {
     }
   }
   // UI Manager methods (bound to this instance)
-  _addMessage(type, content) {
+  addMessage(type, content) {
     addMessage(this, type, content);
   }
   _updateStreamedMessage(contentFragment) {
@@ -1192,12 +1192,12 @@ class StreamingChatWidget {
       if (!messageText) return;
       this.elements.chatInput.value = "";
     }
-    this._addMessage("user", messageText);
+    this.addMessage("user", messageText);
     if (!this.isSessionInitialized) {
-      this._addMessage("system", "Initializing session before sending...");
+      this.addMessage("system", "Initializing session before sending...");
       await this.initSession();
       if (!this.isSessionInitialized) {
-        this._addMessage("system", "Session initialization failed. Cannot send message.");
+        this.addMessage("system", "Session initialization failed. Cannot send message.");
         this._removeSendingSpinner();
         return;
       }
