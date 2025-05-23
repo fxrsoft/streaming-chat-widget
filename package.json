@@ -1,0 +1,26 @@
+{
+  "name": "streaming-chat-widget-v2",
+  "version": "1.0.0",
+  "description": "A customizable Streaming (SSE) chat widget for websites.",
+  "main": "streaming-chat-widget.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "vite build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fxrsoft/streaming-chat-widget.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/fxrsoft/streaming-chat-widget/issues"
+  },
+  "homepage": "https://github.com/fxrsoft/streaming-chat-widget#readme",
+  "devDependencies": {
+    "terser": "^5.39.2",
+    "vite": "^6.3.5"
+  }
+}
