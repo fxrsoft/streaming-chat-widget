@@ -936,17 +936,17 @@ async function handlePredefinedQuestion(ctx, questionText) {
   }
 }
 async function initSession(ctx) {
-  const { config, addMessage: addMessage2 } = ctx;
+  const { config } = ctx;
   if (ctx.isSessionInitialized) {
     return;
   }
   if (!config.chatId || !config.sessionEndpointUrl) {
     console.error("StreamingChatWidget: Cannot init session. Missing chatId or sessionEndpointUrl in config.");
-    addMessage2(ctx, "system", "Chat initialization failed: Configuration error.");
+    ctx.addMessage("system", "Chat initialization failed: Configuration error.");
     return;
   }
   try {
-    addMessage2(ctx, "system", "Initializing chat session...");
+    ctx.addMessage("system", "Initializing chat session...");
     const response = await fetch(config.sessionEndpointUrl, {
       method: "POST",
       headers: {
@@ -962,10 +962,10 @@ async function initSession(ctx) {
     ctx.sessionToken = data.session_token;
     ctx.assistantId = data.assistant_id;
     ctx.isSessionInitialized = true;
-    addMessage2(ctx, "system", "Chat session started.");
+    ctx.addMessage("system", "Chat session started.");
   } catch (error) {
     console.error("Error initiating chat session:", error);
-    addMessage2(ctx, "system", "Failed to start chat session: " + error.message);
+    ctx.addMessage("system", "Failed to start chat session: " + error.message);
     ctx.isSessionInitialized = false;
   }
 }
