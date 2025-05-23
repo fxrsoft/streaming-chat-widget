@@ -1116,7 +1116,7 @@
           cursor: pointer;
           transition: background-color 0.2s;
           ${this.config.predefinedQuestions.allowTextWrapping ? 
-            'white-space: normal; word-break: break-word;' : 
+            'white-space: nowrap; ' :  // Changed from normal to nowrap
             'white-space: nowrap; text-overflow: ellipsis; overflow: hidden; max-width: 200px;'}
           background-color: ${this.config.predefinedQuestions.buttonColor};
           color: ${this.config.predefinedQuestions.textColor};
