@@ -935,40 +935,6 @@ async function handlePredefinedQuestion(ctx, questionText) {
     elements.predefinedContainer.style.display = "none";
   }
 }
-async function initSession(ctx) {
-  const { config } = ctx;
-  if (ctx.isSessionInitialized) {
-    return;
-  }
-  if (!config.chatId || !config.sessionEndpointUrl) {
-    console.error("StreamingChatWidget: Cannot init session. Missing chatId or sessionEndpointUrl in config.");
-    ctx.addMessage("system", "Chat initialization failed: Configuration error.");
-    return;
-  }
-  try {
-    ctx.addMessage("system", "Initializing chat session...");
-    const response = await fetch(config.sessionEndpointUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ chatid: config.chatId })
-    });
-    if (!response.ok) {
-      const errData = await response.json().catch(() => ({ detail: response.statusText }));
-      throw new Error(errData.detail || `HTTP error ${response.status}`);
-    }
-    const data = await response.json();
-    ctx.sessionToken = data.session_token;
-    ctx.assistantId = data.assistant_id;
-    ctx.isSessionInitialized = true;
-    ctx.addMessage("system", "Chat session started.");
-  } catch (error) {
-    console.error("Error initiating chat session:", error);
-    ctx.addMessage("system", "Failed to start chat session: " + error.message);
-    ctx.isSessionInitialized = false;
-  }
-}
 function handleStreamEvent(ctx, eventName, data) {
   const { streamState, addMessage: addMessage2, updateStreamedMessage: updateStreamedMessage2, removeTypingIndicator: removeTypingIndicator2 } = ctx;
   if (eventName === "thread.message.delta" && data.type === "text_delta") {
@@ -1186,7 +1152,38 @@ class StreamingChatWidget {
   }
   // Session Manager methods
   async initSession() {
-    await initSession(this);
+    const { config } = this;
+    if (this.isSessionInitialized) {
+      return;
+    }
+    if (!config.chatId || !config.sessionEndpointUrl) {
+      console.error("StreamingChatWidget: Cannot init session. Missing chatId or sessionEndpointUrl in config.");
+      this.addMessage("system", "Chat initialization failed: Configuration error.");
+      return;
+    }
+    try {
+      this.addMessage("system", "Initializing chat session...");
+      const response = await fetch(config.sessionEndpointUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ chatid: config.chatId })
+      });
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({ detail: response.statusText }));
+        throw new Error(errData.detail || `HTTP error ${response.status}`);
+      }
+      const data = await response.json();
+      this.sessionToken = data.session_token;
+      this.assistantId = data.assistant_id;
+      this.isSessionInitialized = true;
+      this.addMessage("system", "Chat session started.");
+    } catch (error) {
+      console.error("Error initiating chat session:", error);
+      this.addMessage("system", "Failed to start chat session: " + error.message);
+      this.isSessionInitialized = false;
+    }
   }
   // Stream Manager methods
   async _streamResponseFromServer(messageText) {
