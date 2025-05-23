@@ -1127,6 +1127,7 @@ class StreamingChatWidget {
     };
     this.elements = {};
     this.namespace = "sse-chat-" + Math.random().toString(36).substr(2, 9);
+    this.addMessage = this._addMessage.bind(this);
     this._setupDependencies();
     this._initUI();
   }
@@ -1150,7 +1151,7 @@ class StreamingChatWidget {
     }
   }
   // UI Manager methods (bound to this instance)
-  addMessage(type, content) {
+  _addMessage(type, content) {
     addMessage(this, type, content);
   }
   _updateStreamedMessage(contentFragment) {
