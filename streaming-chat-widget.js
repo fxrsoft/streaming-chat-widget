@@ -803,7 +803,7 @@
       const ns = this.namespace;
       
       // Handle special icon styling if configured
-      let buttonBgColor = theme.primaryColor;
+      let buttonBgStyle = `background-color: ${theme.primaryColor};`; // Default
       
       // Check if we have custom icon styles for chat button
       if (this.config.iconStyles && this.config.iconStyles.chatButton) {
@@ -811,11 +811,11 @@
         
         // If transparent background is requested, override background color
         if (btnStyles.transparent) {
-          buttonBgColor = 'transparent';
+          buttonBgStyle = 'background-color: transparent !important;'; // Added !important
         } 
         // Or if specific background color is provided
         else if (btnStyles.backgroundColor) {
-          buttonBgColor = btnStyles.backgroundColor;
+          buttonBgStyle = `background-color: ${btnStyles.backgroundColor};`;
         }
       }
       
@@ -829,7 +829,7 @@
           width: ${size.buttonSize};
           height: ${size.buttonSize};
           border-radius: 50%;
-          background-color: ${buttonBgColor};
+          ${buttonBgStyle}
           color: white;
           display: flex;
           align-items: center;
@@ -1272,22 +1272,24 @@
       // No connection to close, session is HTTP based.
       
       // Remove all DOM elements
-      Object.values(this.elements).forEach(element => {
-        if (element && element.parentNode) {
-          element.parentNode.removeChild(element);
-        }
-      });
+      if (this.elements && typeof this.elements === 'object') { // Guard clause
+        Object.values(this.elements).forEach(element => {
+          if (element && element.parentNode) {
+            element.parentNode.removeChild(element);
+          }
+        });
+        this.elements = {}; // Clear elements object after successful removal
+      }
       
       // Remove any style elements that were created for this widget
       const styleElements = document.querySelectorAll('style');
       styleElements.forEach(style => {
         if (style.textContent && style.textContent.includes(this.namespace)) {
-          style.parentNode.removeChild(style);
+          if (style.parentNode) { // Check if style has a parentNode
+             style.parentNode.removeChild(style);
+          }
         }
       });
-      
-      // Clear elements object
-      this.elements = {};
       
       // Clear stream state
       this.streamState = {
