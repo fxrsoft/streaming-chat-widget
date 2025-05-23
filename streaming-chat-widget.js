@@ -550,7 +550,10 @@ function injectStyles(ctx) {
       font-size: ${config.predefinedQuestions.fontSize || "14px"};
       cursor: pointer;
       transition: background-color 0.2s;
-      ${config.predefinedQuestions.allowTextWrapping ? "white-space: nowrap; " : "white-space: nowrap; text-overflow: ellipsis; overflow: hidden; max-width: 200px;"}
+      ${config.predefinedQuestions.allowTextWrapping ? "white-space: normal; word-wrap: break-word; overflow-wrap: break-word;" : (
+    /* Allow wrapping */
+    "white-space: nowrap; text-overflow: ellipsis; overflow: hidden; max-width: 200px;"
+  )} /* Truncate */
       background-color: ${config.predefinedQuestions.buttonColor};
       color: ${config.predefinedQuestions.textColor};
     }
@@ -775,12 +778,14 @@ function addMessage(ctx, type, content) {
   scrollToBottom(ctx);
 }
 function updateStreamedMessage(ctx, newContentFragment) {
-  const { config, streamState, namespace } = ctx;
-  if (!streamState.currentBotMessage && ctx.elements.chatMessages) {
-    addMessage(ctx, "bot", "");
-    const lastBotMessageContainer = ctx.elements.chatMessages.querySelector(`.${namespace}-bot-message-container:last-child`);
+  const { config, streamState, namespace, elements } = ctx;
+  if (!streamState.currentBotMessage && elements.chatMessages) {
+    ctx.addMessage("bot", "");
+    const lastBotMessageContainer = elements.chatMessages.querySelector(`.${namespace}-bot-message-container:last-child`);
+    console.log("[uiManager] lastBotMessageContainer:", lastBotMessageContainer);
     if (lastBotMessageContainer) {
       streamState.currentBotMessage = lastBotMessageContainer.querySelector(`.${namespace}-bot-message`);
+      console.log("[uiManager] streamState.currentBotMessage SET:", streamState.currentBotMessage);
     }
   }
   if (streamState.currentBotMessage && newContentFragment) {
@@ -935,128 +940,6 @@ async function handlePredefinedQuestion(ctx, questionText) {
     elements.predefinedContainer.style.display = "none";
   }
 }
-function handleStreamEvent(ctx, eventName, data) {
-  const { streamState, addMessage: addMessage2, updateStreamedMessage: updateStreamedMessage2, removeTypingIndicator: removeTypingIndicator2 } = ctx;
-  if (eventName === "thread.message.delta" && data.type === "text_delta") {
-    if (data.content) {
-      updateStreamedMessage2(ctx, data.content);
-    }
-  } else if (eventName === "thread.run.completed") {
-    streamState.isStreaming = false;
-    removeTypingIndicator2(ctx);
-    streamState.currentBotMessage = null;
-    streamState.activeMessageContent = "";
-  } else if (eventName === "thread.run.failed" || eventName === "error") {
-    addMessage2(ctx, "system", `Error: ${data.error || data.detail || "An unknown error occurred."}`);
-    streamState.isStreaming = false;
-    removeTypingIndicator2(ctx);
-    streamState.currentBotMessage = null;
-    streamState.activeMessageContent = "";
-  } else if (eventName === "stream_end") {
-    streamState.isStreaming = false;
-    removeTypingIndicator2(ctx);
-    if (streamState.currentBotMessage && streamState.activeMessageContent === "") ;
-    streamState.currentBotMessage = null;
-    streamState.activeMessageContent = "";
-  }
-}
-async function streamResponseFromServer(ctx, messageText) {
-  const {
-    config,
-    streamState,
-    sessionToken,
-    isSessionInitialized,
-    addMessage: addMessage2,
-    removeSendingSpinner: removeSendingSpinner2,
-    showTypingIndicator: showTypingIndicator2
-  } = ctx;
-  if (!isSessionInitialized || !sessionToken) {
-    addMessage2(ctx, "system", "Session not initialized. Please try again.");
-    removeSendingSpinner2(ctx);
-    return;
-  }
-  if (!config.backendStreamUrl) {
-    console.error("StreamingChatWidget: backendStreamUrl is not configured.");
-    addMessage2(ctx, "system", "Chat stream endpoint not configured.");
-    removeSendingSpinner2(ctx);
-    return;
-  }
-  streamState.isStreaming = true;
-  streamState.activeMessageContent = "";
-  streamState.currentBotMessage = null;
-  try {
-    const response = await fetch(config.backendStreamUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        session_token: sessionToken,
-        message: messageText
-      })
-    });
-    removeSendingSpinner2(ctx);
-    if (!response.ok || !response.body) {
-      const errorData = await response.json().catch(() => ({ detail: response.statusText }));
-      addMessage2(ctx, "system", `Error: ${errorData.detail || "Failed to connect to stream"}`);
-      streamState.isStreaming = false;
-      return;
-    }
-    showTypingIndicator2(ctx);
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) {
-        if (buffer.trim().length > 0) {
-          console.warn("Stream ended with unprocessed buffer:", buffer);
-        }
-        if (streamState.isStreaming) {
-          handleStreamEvent(ctx, "stream_end", { message: "Stream closed by server." });
-        }
-        break;
-      }
-      buffer += decoder.decode(value, { stream: true });
-      let boundary = buffer.indexOf("\\n\\n");
-      while (boundary !== -1) {
-        const rawSseEvent = buffer.substring(0, boundary);
-        buffer = buffer.substring(boundary + 2);
-        let eventName = "message";
-        let eventDataLines = [];
-        rawSseEvent.split("\\n").forEach((line) => {
-          if (line.startsWith("event:")) {
-            eventName = line.substring("event:".length).trim();
-          } else if (line.startsWith("data:")) {
-            eventDataLines.push(line.substring("data:".length).trim());
-          }
-        });
-        const eventData = eventDataLines.join("");
-        if (eventData) {
-          try {
-            const parsedData = JSON.parse(eventData);
-            if (eventName === "cached_message") {
-              if (parsedData.role && parsedData.content) {
-                const messageType = parsedData.role === "assistant" ? "bot" : parsedData.role;
-                addMessage2(ctx, messageType, parsedData.content);
-              } else {
-              }
-            } else {
-              handleStreamEvent(ctx, eventName, parsedData);
-            }
-          } catch (e) {
-            console.error("Error parsing SSE data:", eventData, e);
-          }
-        }
-        boundary = buffer.indexOf("\\n\\n");
-      }
-    }
-  } catch (error) {
-    console.error("Streaming fetch error:", error);
-    addMessage2(ctx, "system", "Connection error during streaming.");
-    streamState.isStreaming = false;
-    ctx.removeTypingIndicator(ctx);
-    removeSendingSpinner2(ctx);
-  }
-}
 if (!window.DOMPurify) {
   console.error("StreamingChatWidget requires DOMPurify. Please include it in your page.");
 }
@@ -1125,8 +1008,9 @@ class StreamingChatWidget {
   }
   // UI Manager methods (bound to this instance)
   _addMessage(type, content) {
-    addMessage(this, type, content);
+    return addMessage(this, type, content);
   }
+  // Ensure it returns for the new logic in uiManager
   _updateStreamedMessage(contentFragment) {
     updateStreamedMessage(this, contentFragment);
   }
@@ -1185,9 +1069,153 @@ class StreamingChatWidget {
       this.isSessionInitialized = false;
     }
   }
-  // Stream Manager methods
+  // Inlined stream event handler
+  _handleStreamEvent(eventName, data) {
+    const { streamState, addMessage: addMessage2, _updateStreamedMessage, _removeTypingIndicator } = this;
+    if (eventName === "thread.message.delta" && data.type === "text_delta") {
+      if (data.content) {
+        _updateStreamedMessage(data.content);
+      }
+    } else if (eventName === "thread.run.completed") {
+      streamState.isStreaming = false;
+      _removeTypingIndicator();
+      streamState.currentBotMessage = null;
+      streamState.activeMessageContent = "";
+    } else if (eventName === "thread.run.failed" || eventName === "error") {
+      addMessage2("system", `Error: ${data.error || data.detail || "An unknown error occurred."}`);
+      streamState.isStreaming = false;
+      _removeTypingIndicator();
+      streamState.currentBotMessage = null;
+      streamState.activeMessageContent = "";
+    } else if (eventName === "stream_end") {
+      streamState.isStreaming = false;
+      _removeTypingIndicator();
+      streamState.currentBotMessage = null;
+      streamState.activeMessageContent = "";
+    }
+  }
+  // Stream Manager methods - Inlined
   async _streamResponseFromServer(messageText) {
-    await streamResponseFromServer(this, messageText);
+    const {
+      config,
+      streamState,
+      sessionToken,
+      isSessionInitialized,
+      addMessage: addMessage2,
+      _removeSendingSpinner,
+      _showTypingIndicator,
+      _removeTypingIndicator
+    } = this;
+    if (!isSessionInitialized || !sessionToken) {
+      addMessage2("system", "Session not initialized. Please try again.");
+      _removeSendingSpinner();
+      return;
+    }
+    if (!config.backendStreamUrl) {
+      addMessage2("system", "Chat stream endpoint not configured.");
+      _removeSendingSpinner();
+      return;
+    }
+    streamState.isStreaming = true;
+    streamState.activeMessageContent = "";
+    streamState.currentBotMessage = null;
+    try {
+      const response = await fetch(config.backendStreamUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_token: sessionToken,
+          message: messageText
+        })
+      });
+      _removeSendingSpinner();
+      if (!response.ok || !response.body) {
+        const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+        addMessage2("system", `Error: ${errorData.detail || "Failed to connect to stream"}`);
+        streamState.isStreaming = false;
+        return;
+      }
+      _showTypingIndicator();
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) {
+          if (buffer.trim().length > 0) {
+            if (!buffer.endsWith("\n\n")) {
+              buffer += "\n\n";
+            }
+            let boundary2 = buffer.indexOf("\n\n");
+            while (boundary2 !== -1) {
+              const rawSseEvent = buffer.substring(0, boundary2);
+              buffer = buffer.substring(boundary2 + 2);
+              let eventName = "message";
+              let eventDataLines = [];
+              rawSseEvent.split("\n").forEach((line) => {
+                if (line.startsWith("event:")) {
+                  eventName = line.substring("event:".length).trim();
+                } else if (line.startsWith("data:")) {
+                  eventDataLines.push(line.substring("data:".length).trim());
+                }
+              });
+              const eventData = eventDataLines.join("");
+              if (eventData) {
+                try {
+                  const parsedData = JSON.parse(eventData);
+                  this._handleStreamEvent(eventName, parsedData);
+                } catch (e) {
+                  console.error("Error parsing final buffer SSE data:", eventData, e);
+                }
+              }
+              boundary2 = buffer.indexOf("\n\n");
+            }
+          }
+          if (streamState.isStreaming) {
+            this._handleStreamEvent("stream_end", { message: "Stream closed by server (final processing complete)." });
+          }
+          break;
+        }
+        buffer += decoder.decode(value, { stream: true });
+        let boundary = buffer.indexOf("\n\n");
+        while (boundary !== -1) {
+          const rawSseEvent = buffer.substring(0, boundary);
+          buffer = buffer.substring(boundary + 2);
+          let eventName = "message";
+          let eventDataLines = [];
+          rawSseEvent.split("\n").forEach((line) => {
+            if (line.startsWith("event:")) {
+              eventName = line.substring("event:".length).trim();
+            } else if (line.startsWith("data:")) {
+              eventDataLines.push(line.substring("data:".length).trim());
+            }
+          });
+          const eventData = eventDataLines.join("");
+          if (eventData) {
+            try {
+              const parsedData = JSON.parse(eventData);
+              if (eventName === "cached_message") {
+                if (parsedData.role && parsedData.content) {
+                  const messageType = parsedData.role === "assistant" ? "bot" : parsedData.role;
+                  addMessage2(messageType, parsedData.content);
+                }
+              } else {
+                this._handleStreamEvent(eventName, parsedData);
+              }
+            } catch (e) {
+              console.error("Error parsing SSE data:", eventData, e);
+            }
+          }
+          boundary = buffer.indexOf("\n\n");
+        }
+      }
+    } catch (error) {
+      console.error("Streaming fetch error:", error);
+      addMessage2("system", "Connection error during streaming.");
+      streamState.isStreaming = false;
+      _removeTypingIndicator();
+      _removeSendingSpinner();
+    }
   }
   // Public API
   async sendMessage(text) {
