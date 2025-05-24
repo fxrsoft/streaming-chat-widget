@@ -128,15 +128,19 @@ function createIconElement(iconContent, size = null) {
   if (!iconContent) return "";
   const iconConfig = parseIconConfig(iconContent);
   if (iconConfig) {
-    const width = iconConfig.size || size || "24";
-    const height = iconConfig.size || size || "24";
+    const widthValue = iconConfig.size || size || "24";
+    const heightValue = iconConfig.size || size || "24";
+    const widthStr = String(widthValue);
+    const heightStr = String(heightValue);
     let styles = `max-width: 100%; height: auto;`;
-    return `<img src="${iconConfig.url}" width="${width.replace("px", "")}" height="${height.replace("px", "")}" alt="Icon" style="${styles}">`;
+    return `<img src="${iconConfig.url}" width="${widthStr.replace("px", "")}" height="${heightStr.replace("px", "")}" alt="Icon" style="${styles}">`;
   }
   if (isUrl(iconContent)) {
-    const width = size || "24";
-    const height = size || "24";
-    return `<img src="${iconContent}" width="${width.replace("px", "")}" height="${height.replace("px", "")}" alt="Icon" style="max-width: 100%; height: auto;">`;
+    const widthValue = size || "24";
+    const heightValue = size || "24";
+    const widthStr = String(widthValue);
+    const heightStr = String(heightValue);
+    return `<img src="${iconContent}" width="${widthStr.replace("px", "")}" height="${heightStr.replace("px", "")}" alt="Icon" style="max-width: 100%; height: auto;">`;
   }
   return iconContent;
 }
