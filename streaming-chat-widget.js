@@ -980,6 +980,8 @@ class StreamingChatWidget {
       typingIndicator: null,
       sendingSpinner: null
     };
+    this.awaitingPotentialCacheEcho = false;
+    this.lastSentUserMessageText = null;
     this.elements = {};
     this.namespace = "sse-chat-" + Math.random().toString(36).substr(2, 9);
     this.addMessage = this._addMessage.bind(this);
@@ -1087,17 +1089,29 @@ class StreamingChatWidget {
       _removeTypingIndicator();
       streamState.currentBotMessage = null;
       streamState.activeMessageContent = "";
+      this.awaitingPotentialCacheEcho = false;
+      if (this.lastSentUserMessageText !== null) {
+        this.lastSentUserMessageText = null;
+      }
     } else if (eventName === "thread.run.failed" || eventName === "error") {
       addMessage2("system", `Error: ${data.error || data.detail || "An unknown error occurred."}`);
       streamState.isStreaming = false;
       _removeTypingIndicator();
       streamState.currentBotMessage = null;
       streamState.activeMessageContent = "";
+      this.awaitingPotentialCacheEcho = false;
+      if (this.lastSentUserMessageText !== null) {
+        this.lastSentUserMessageText = null;
+      }
     } else if (eventName === "stream_end") {
       streamState.isStreaming = false;
       _removeTypingIndicator();
       streamState.currentBotMessage = null;
       streamState.activeMessageContent = "";
+      this.awaitingPotentialCacheEcho = false;
+      if (this.lastSentUserMessageText !== null) {
+        this.lastSentUserMessageText = null;
+      }
     }
   }
   // Stream Manager methods - Inlined
@@ -1202,8 +1216,15 @@ class StreamingChatWidget {
               const parsedData = JSON.parse(eventData);
               if (eventName === "cached_message") {
                 if (parsedData.role && parsedData.content) {
-                  const messageType = parsedData.role === "assistant" ? "bot" : parsedData.role;
-                  addMessage2(messageType, parsedData.content);
+                  const messageType = parsedData.role === "assistant" ? "bot" : parsedData.role === "user" ? "user" : parsedData.role;
+                  let shouldAddUiMessage = true;
+                  if (this.awaitingPotentialCacheEcho && messageType === "user" && parsedData.content === this.lastSentUserMessageText) {
+                    shouldAddUiMessage = false;
+                    this.lastSentUserMessageText = null;
+                  }
+                  if (shouldAddUiMessage) {
+                    addMessage2(messageType, parsedData.content);
+                  }
                 }
               } else {
                 this._handleStreamEvent(eventName, parsedData);
@@ -1232,11 +1253,15 @@ class StreamingChatWidget {
       this.elements.chatInput.value = "";
     }
     this.addMessage("user", messageText);
+    this.awaitingPotentialCacheEcho = true;
+    this.lastSentUserMessageText = messageText;
     if (!this.isSessionInitialized) {
       this.addMessage("system", "Initializing session before sending...");
       await this.initSession();
       if (!this.isSessionInitialized) {
         this.addMessage("system", "Session initialization failed. Cannot send message.");
+        this.awaitingPotentialCacheEcho = false;
+        this.lastSentUserMessageText = null;
         this._removeSendingSpinner();
         return;
       }
