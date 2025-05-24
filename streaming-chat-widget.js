@@ -251,10 +251,12 @@ function injectStyles(ctx) {
   const { config, namespace } = ctx;
   const { theme, size, position } = config;
   let buttonBgStyle = `background-color: ${theme.primaryColor};`;
+  let buttonBoxShadowStyle = `box-shadow: 0 2px 10px rgba(0,0,0,0.2);`;
   if (config.iconStyles && config.iconStyles.chatButton) {
     const btnStyles = config.iconStyles.chatButton;
     if (btnStyles.transparent) {
       buttonBgStyle = "background-color: transparent !important;";
+      buttonBoxShadowStyle = "box-shadow: none !important;";
     } else if (btnStyles.backgroundColor) {
       buttonBgStyle = `background-color: ${btnStyles.backgroundColor};`;
     }
@@ -269,13 +271,13 @@ function injectStyles(ctx) {
       height: ${size.buttonSize};
       border-radius: 50%;
       ${buttonBgStyle}
+      ${buttonBoxShadowStyle}
       color: white;
       display: flex;
       align-items: center;
       justify-content: center;
       cursor: pointer;
       border: none;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.2);
       z-index: 9999;
       transition: transform 0.2s;
     }
