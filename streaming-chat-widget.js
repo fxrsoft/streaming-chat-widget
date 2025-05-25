@@ -1054,7 +1054,6 @@ class StreamingChatWidget {
       return;
     }
     try {
-      this.addMessage("system", "Initializing chat session...");
       const response = await fetch(config.sessionEndpointUrl, {
         method: "POST",
         headers: {
@@ -1070,7 +1069,6 @@ class StreamingChatWidget {
       this.sessionToken = data.session_token;
       this.assistantId = data.assistant_id;
       this.isSessionInitialized = true;
-      this.addMessage("system", "Chat session started.");
     } catch (error) {
       console.error("Error initiating chat session:", error);
       this.addMessage("system", "Failed to start chat session: " + error.message);
@@ -1256,7 +1254,6 @@ class StreamingChatWidget {
     this.awaitingPotentialCacheEcho = true;
     this.lastSentUserMessageText = messageText;
     if (!this.isSessionInitialized) {
-      this.addMessage("system", "Initializing session before sending...");
       await this.initSession();
       if (!this.isSessionInitialized) {
         this.addMessage("system", "Session initialization failed. Cannot send message.");
