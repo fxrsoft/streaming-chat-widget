@@ -677,12 +677,14 @@ function injectStyles(ctx) {
 }
 function addMessage(ctx, type, content) {
   const { config, namespace, elements } = ctx;
+  let messageElementToScroll;
   if (!elements.chatMessages) return;
   if (type === "system") {
     const systemMsg = document.createElement("div");
     systemMsg.className = `${namespace}-system-message`;
     systemMsg.textContent = content;
     elements.chatMessages.appendChild(systemMsg);
+    messageElementToScroll = systemMsg;
     if (content === "Initializing chat session..." || content === "Chat session started." || content === "Initializing session before sending...") {
       setTimeout(() => {
         if (systemMsg && systemMsg.parentNode) {
@@ -702,6 +704,7 @@ function addMessage(ctx, type, content) {
     wrapper.appendChild(avatar);
     wrapper.appendChild(message);
     elements.chatMessages.appendChild(wrapper);
+    messageElementToScroll = wrapper;
   } else if (type === "bot") {
     const wrapper = document.createElement("div");
     wrapper.className = `${namespace}-message-with-avatar ${namespace}-bot-message-container`;
@@ -780,8 +783,9 @@ function addMessage(ctx, type, content) {
     wrapper.appendChild(avatar);
     wrapper.appendChild(message);
     elements.chatMessages.appendChild(wrapper);
+    messageElementToScroll = wrapper;
   }
-  scrollToBottom(ctx);
+  scrollToElementTop(messageElementToScroll);
 }
 function updateStreamedMessage(ctx, newContentFragment) {
   const { config, streamState, namespace, elements } = ctx;
@@ -863,7 +867,7 @@ function updateStreamedMessage(ctx, newContentFragment) {
       }
     });
     streamState.currentBotMessage.innerHTML = youtubeEmbedDiv.innerHTML;
-    scrollToBottom(ctx);
+    if (streamState.currentBotMessage) scrollToElementTop(streamState.currentBotMessage);
   }
 }
 function showSendingSpinner(ctx) {
@@ -913,6 +917,11 @@ function removeTypingIndicator(ctx) {
   if (streamState.typingIndicator && streamState.typingIndicator.parentNode) {
     streamState.typingIndicator.parentNode.removeChild(streamState.typingIndicator);
     streamState.typingIndicator = null;
+  }
+}
+function scrollToElementTop(element) {
+  if (element && typeof element.scrollIntoView === "function") {
+    element.scrollIntoView({ behavior: "auto", block: "start" });
   }
 }
 function scrollToBottom(ctx) {
